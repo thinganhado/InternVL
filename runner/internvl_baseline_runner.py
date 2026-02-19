@@ -28,7 +28,7 @@ DEFAULT_META_CSV = "/datasets/work/dss-deepfake-audio/work/data/datasets/intersp
 DEFAULT_META_JSON = "/datasets/work/dss-deepfake-audio/work/data/datasets/interspeech/baseline_SFT/stage1_val.json"
 DEFAULT_IMAGE_FOLDER = "/datasets/work/dss-deepfake-audio/work/data/datasets/interspeech/img/specs/grid"
 DEFAULT_MODEL_ID = "/datasets/work/dss-deepfake-audio/work/data/datasets/interspeech/VLM/InternVL3-78B/"
-DEFAULT_OUTPUT_DIR = "/datasets/work/dss-deepfake-audio/work/data/datasets/interspeech/baseline_strongVLM/"
+DEFAULT_OUTPUT_ROOT = "/datasets/work/dss-deepfake-audio/work/data/datasets/interspeech/baseline_strongVLM/"
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
@@ -286,6 +286,11 @@ def _resolve_torch_dtype(dtype_str: str):
     return mapping[dtype_str]
 
 
+def _default_output_dir_from_model(model_id: str) -> str:
+    model_name = Path(str(model_id).rstrip("/\\")).name or "model"
+    return str(Path(DEFAULT_OUTPUT_ROOT) / f"{model_name}_test")
+
+
 def _generate_one(model, tokenizer, pixel_values, question, max_new_tokens, do_sample, temperature, top_p):
     generation_config = {
         "max_new_tokens": max_new_tokens,
@@ -344,7 +349,11 @@ def parse_args():
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--top-p", type=float, default=0.9)
 
-    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Output root directory.")
+    parser.add_argument(
+        "--output-dir",
+        default=None,
+        help=f"Output root directory. Default: {DEFAULT_OUTPUT_ROOT}/<model_name>_test",
+    )
     parser.add_argument("--output-jsonl", default=None, help="Optional flat output jsonl path.")
     parser.add_argument("--overwrite", action="store_true", default=False, help="Regenerate outputs even if already present.")
     parser.add_argument("--print-prompts", action="store_true", help="Print system/user prompts before generation.")
@@ -369,7 +378,8 @@ def main():
         if not items:
             raise ValueError("No items assigned to this shard.")
 
-    output_dir = Path(args.output_dir).expanduser().resolve()
+    output_dir_str = args.output_dir if args.output_dir else _default_output_dir_from_model(args.model_id)
+    output_dir = Path(output_dir_str).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     output_jsonl = Path(args.output_jsonl).expanduser().resolve() if args.output_jsonl else output_dir / "internvl_outputs.jsonl"
