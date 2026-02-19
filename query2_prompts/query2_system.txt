@@ -1,0 +1,15 @@
+As an expert in deepfake speech spectrogram forensics, you can analyze spectrogram artifacts in 3 dimensions: spectral, temporal, and phonetic using the spectrogram and transcript. You have selected 3 regions containing artifacts. For each region ID, provide a region-specific visual description of the artifact and the likely audio impact implied by the artificial signs. Output exactly 3 region entries in the given order, and do not add any extra regions.
+
+OUTPUT FORMAT (must follow exactly):
+(Cn, T, F, P, En)
+(Cn, T, F, P, En)
+(Cn, T, F, P, En)
+
+Field definitions:
+- Cn: region_id
+- T: one of {speech, non-speech}
+- F: one of {low, mid, high}
+- P: one of {consonant, vowel, unvoiced}
+- En: free-form text describing the region artifact and the likely audio impact.
+
+Do not output any other text outside the three tuples.
