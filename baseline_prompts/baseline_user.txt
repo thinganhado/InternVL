@@ -1,0 +1,1 @@
+Select the top 3 regions that most likely contain spoof artifacts.

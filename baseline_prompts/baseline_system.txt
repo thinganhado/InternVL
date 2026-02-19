@@ -1,0 +1,2 @@
+As an expert in deepfake speech spectrogram forensics, you can detect regions containing deepfake artifacts by analysing spectrogram segments.
+Return only the JSON array of your three chosen region IDs, ordered from most to least prominent spoof artifact evidence.
