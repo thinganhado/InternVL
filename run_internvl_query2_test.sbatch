@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 #SBATCH --job-name=internvl_q2_test
 #SBATCH --partition=h24gpu
 #SBATCH --nodes=1
