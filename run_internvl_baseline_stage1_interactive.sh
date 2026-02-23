@@ -24,6 +24,7 @@ mkdir -p logs
 export CUDA_LAUNCH_BLOCKING="${CUDA_LAUNCH_BLOCKING:-1}"
 export TRANSFORMERS_VERBOSITY="${TRANSFORMERS_VERBOSITY:-info}"
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+export PYTORCH_ALLOC_CONF="${PYTORCH_ALLOC_CONF:-expandable_segments:True}"
 export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS:-1}"
 
 MODEL_ID="${MODEL_ID:-/datasets/work/dss-deepfake-audio/work/data/datasets/interspeech/VLM/InternVL3-78B/}"
@@ -44,8 +45,30 @@ HF_HOME="${HF_HOME:-${CACHE_BASE_DIR}/huggingface}"
 TORCH_HOME="${TORCH_HOME:-${CACHE_BASE_DIR}/torch}"
 TMPDIR="${TMPDIR:-/tmp/${USER}/internvl_baseline}"
 
-SHARD_COUNT="${SHARD_COUNT:-4}"
 TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-1}"
+GPU_IDS="${GPU_IDS:-0,1,2,3}"
+IFS=',' read -r -a _GPU_ARR <<< "${GPU_IDS}"
+GPU_COUNT="${#_GPU_ARR[@]}"
+if (( GPU_COUNT < 1 )); then
+  echo "[error] GPU_IDS is empty."
+  exit 2
+fi
+if (( TENSOR_PARALLEL_SIZE < 1 )); then
+  echo "[error] TENSOR_PARALLEL_SIZE must be >= 1."
+  exit 2
+fi
+if (( GPU_COUNT % TENSOR_PARALLEL_SIZE != 0 )); then
+  echo "[error] GPU count (${GPU_COUNT}) must be divisible by TENSOR_PARALLEL_SIZE (${TENSOR_PARALLEL_SIZE})."
+  echo "[hint] Example: GPU_IDS=0,1,2,3 TENSOR_PARALLEL_SIZE=2"
+  exit 2
+fi
+GPU_GROUP_COUNT=$((GPU_COUNT / TENSOR_PARALLEL_SIZE))
+SHARD_COUNT="${SHARD_COUNT:-${GPU_GROUP_COUNT}}"
+if (( SHARD_COUNT > GPU_GROUP_COUNT )); then
+  echo "[error] SHARD_COUNT (${SHARD_COUNT}) exceeds available parallel GPU groups (${GPU_GROUP_COUNT})."
+  echo "[hint] Reduce SHARD_COUNT or set smaller TENSOR_PARALLEL_SIZE."
+  exit 2
+fi
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-768}"
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-512}"
 VLLM_GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.9}"
@@ -89,6 +112,8 @@ PY
 echo "[run] SCRIPT_DIR=${SCRIPT_DIR}"
 echo "[run] MODEL_ID=${MODEL_ID}"
 echo "[run] SHARD_COUNT=${SHARD_COUNT}"
+echo "[run] TENSOR_PARALLEL_SIZE=${TENSOR_PARALLEL_SIZE}"
+echo "[run] GPU_IDS=${GPU_IDS}"
 echo "[run] RUN_TAG=${RUN_TAG}"
 echo "[run] RUN_OUTPUT_ROOT=${RUN_OUTPUT_ROOT}"
 
@@ -96,6 +121,17 @@ pids=()
 shards=()
 
 for ((i=0; i<SHARD_COUNT; i++)); do
+  group_start=$((i * TENSOR_PARALLEL_SIZE))
+  group_end=$((group_start + TENSOR_PARALLEL_SIZE - 1))
+  gpu_list=""
+  for ((g=group_start; g<=group_end; g++)); do
+    if [[ -z "${gpu_list}" ]]; then
+      gpu_list="${_GPU_ARR[$g]}"
+    else
+      gpu_list="${gpu_list},${_GPU_ARR[$g]}"
+    fi
+  done
+
   out_dir="${RUN_OUTPUT_ROOT}/shard_${i}_of_${SHARD_COUNT}"
   out_jsonl="${RUN_OUTPUT_ROOT}/internvl_baseline_outputs_shard_${i}.jsonl"
   log_file="logs/internvl_baseline_${MODEL_TAG}_shard_${i}_${RUN_TAG}.log"
@@ -128,8 +164,8 @@ for ((i=0; i<SHARD_COUNT; i++)); do
     cmd+=(--overwrite)
   fi
 
-  echo "[launch] shard=${i} gpu=${i} log=${log_file}"
-  CUDA_VISIBLE_DEVICES="${i}" "${cmd[@]}" > "${log_file}" 2>&1 &
+  echo "[launch] shard=${i} gpus=${gpu_list} log=${log_file}"
+  CUDA_VISIBLE_DEVICES="${gpu_list}" "${cmd[@]}" > "${log_file}" 2>&1 &
   pids+=("$!")
   shards+=("${i}")
 done
