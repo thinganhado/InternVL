@@ -91,6 +91,25 @@ def _extract_gt_regions_from_example(example: dict) -> str:
     if "regions" in example:
         return str(example.get("regions", "")).strip()
 
+    # Swift-style records: messages with assistant text containing GT region IDs.
+    messages = example.get("messages", [])
+    if isinstance(messages, list):
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            if str(msg.get("role", "")).strip().lower() != "assistant":
+                continue
+            content = msg.get("content")
+            if isinstance(content, str) and content.strip():
+                return content.strip()
+            if isinstance(content, list):
+                for item in content:
+                    if not isinstance(item, dict):
+                        continue
+                    text = item.get("text")
+                    if isinstance(text, str) and text.strip():
+                        return text.strip()
+
     conversations = example.get("conversations", [])
     if not isinstance(conversations, list):
         return ""
